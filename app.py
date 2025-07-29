@@ -32,9 +32,10 @@ st.set_page_config(
 MAROON_COLOR = "#B0191E"
 CUSTOM_CSS = f"""
 <style>
-body {{
-    background-color: #f8f6f2;
-    font-family: Arial, sans-serif;
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap');
+html, body {{
+    background: linear-gradient(180deg, {MAROON_COLOR} 0%, #f8f6f2 200px);
+    font-family: 'Montserrat', Arial, sans-serif;
 }}
 h1, h2, h3 {{
     color: {MAROON_COLOR};
@@ -43,6 +44,7 @@ h1, h2, h3 {{
     background-color: {MAROON_COLOR};
     color: white;
     border: none;
+    border-radius: 4px;
 }}
 .stButton > button:hover {{
     background-color: #7d1014;
