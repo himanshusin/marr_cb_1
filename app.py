@@ -53,6 +53,37 @@ h1, h2, h3 {{
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+# Background layout to mimic Marriott credit card webpage with chat widget in
+# the bottom left corner. The Marriott page is loaded in an iframe and the
+# Streamlit chat interface is positioned as an overlay.
+BACKGROUND_HTML = """
+<iframe src="https://www.marriott.com/credit-cards.mi" class="marriott-bg"></iframe>
+<style>
+body { margin: 0; }
+.marriott-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    z-index: -1;
+}
+.chat-widget {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 380px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    z-index: 1000;
+}
+</style>
+"""
+st.markdown(BACKGROUND_HTML, unsafe_allow_html=True)
+
 # Model configuration
 MODEL_ID = "meta-textgeneration-llama-2-7b-f"
 MODEL_VERSION = "*"
@@ -633,8 +664,10 @@ def main():
         """)
         return
     
-    # Render main chat interface
+    # Render main chat interface inside the floating widget
+    st.markdown('<div class="chat-widget">', unsafe_allow_html=True)
     render_chat_interface()
+    st.markdown('</div>', unsafe_allow_html=True)
     
     # Footer
     st.markdown("---")
