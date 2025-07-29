@@ -1,74 +1,19 @@
-# Chat input
-    if prompt := st.chat_input("Ask me about Marriott credit cards and travel rewards..."):
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Generate and display assistant response
-        with st.chat_message("assistant"):
-            with st.spinner("Finding the best credit card options for you..."):
-                response = generate_response(
-                    st.session_state.predictor, 
-                    prompt, 
-                    max_length=st.session_state.get('max_length', 250)
-                )
-            st.markdown(response)
-        
-        # Add assistant response to messages
-        st.session_state.messages.append({"role": "assistant", "content": response})
-    
-    # Quick action buttons for common questions
-    st.markdown("---")
-    st.subheader("🚀 Quick Questions")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("💳 Compare Cards", help="See all Marriott credit card options"):
-            quick_question = "Can you compare all the Marriott credit cards and their benefits?"
-            st.session_state.messages.append({"role": "user", "content": quick_question})
-            with st.chat_message("user"):
-                st.markdown(quick_question)
-            with st.chat_message("assistant"):
-                with st.spinner("Comparing card options..."):
-                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
-                st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
-    
-    with col2:
-        if st.button("✈️ Travel Benefits", help="Learn about travel perks and rewards"):
-            quick_question = "What travel benefits and perks do Marriott credit cards offer?"
-            st.session_state.messages.append({"role": "user", "content": quick_question})
-            with st.chat_message("user"):
-                st.markdown(quick_question)
-            with st.chat_message("assistant"):
-                with st.spinner("Finding travel benefits..."):
-                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
-                st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
-    
-    with col3:
-        if st.button("📝 Apply Now", help="Start your application process"):
-            quick_question = "How can I apply for a Marriott credit card and what do I need?"
-            st.session_state.messages.append({"role": "user", "content": quick_question})
-            with st.chat_message("user"):
-                st.markdown(quick_question)
-            with st.chat_message("assistant"):
-                with st.spinner("Preparing application information..."):
-                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
-                st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()#%% Section 1: Import Dependencies
+#%% Section 1: Import Dependencies
 import streamlit as st
 import boto3
 import json
 import os
+import traceback
 from sagemaker.jumpstart.model import JumpStartModel
 from sagemaker import get_execution_role
 import time
 from typing import Dict, List
+
+
+def log_exception(context: str, exc: Exception) -> None:
+    """Display verbose error information in the app."""
+    st.error(f"{context}: {exc}")
+    st.text(traceback.format_exc())
 
 #%% Section 2: Configuration and Setup
 # Page config
@@ -175,8 +120,8 @@ def initialize_session_state():
 def setup_aws_session():
     """Setup AWS session and SageMaker"""
     try:
-        # Initialize boto3 session
-        session = boto3.Session()
+        # Initialize boto3 session with default region
+        session = boto3.Session(region_name="us-east-1")
         
         # Get AWS credentials info for display
         sts = session.client('sts')
@@ -184,13 +129,13 @@ def setup_aws_session():
         
         return session, identity
     except Exception as e:
-        st.error(f"AWS Setup Error: {str(e)}")
+        log_exception("AWS Setup Error", e)
         return None, None
 
 def get_existing_endpoints():
     """Get list of existing SageMaker endpoints"""
     try:
-        session = boto3.Session()
+        session = boto3.Session(region_name="us-east-1")
         sagemaker_client = session.client('sagemaker')
         
         response = sagemaker_client.list_endpoints(
@@ -201,7 +146,7 @@ def get_existing_endpoints():
         endpoints = [ep['EndpointName'] for ep in response['Endpoints']]
         return endpoints
     except Exception as e:
-        st.error(f"Error fetching endpoints: {str(e)}")
+        log_exception("Error fetching endpoints", e)
         return []
 
 def connect_to_existing_endpoint(endpoint_name: str):
@@ -232,7 +177,7 @@ def connect_to_existing_endpoint(endpoint_name: str):
         
         return predictor
     except Exception as e:
-        st.error(f"Error connecting to endpoint: {str(e)}")
+        log_exception("Error connecting to endpoint", e)
         return None
 
 def deploy_new_model():
@@ -254,7 +199,7 @@ def deploy_new_model():
             
             return predictor
     except Exception as e:
-        st.error(f"Model Deployment Error: {str(e)}")
+        log_exception("Model Deployment Error", e)
         return None
 
 def generate_response(predictor, user_message: str, max_length: int = 200) -> str:
@@ -316,7 +261,12 @@ Assistant: """
         return filtered_response if filtered_response else "I'm here to help you with Marriott credit cards. What would you like to know about our travel rewards program?"
         
     except Exception as e:
-        return f"I apologize, but I'm having trouble processing your request right now. Let me help you with information about our Marriott credit cards. What specific benefits are you interested in learning about?"
+        log_exception("Prediction Error", e)
+        return (
+            "I apologize, but I'm having trouble processing your request right now. "
+            "Let me help you with information about our Marriott credit cards. "
+            "What specific benefits are you interested in learning about?"
+        )
 
 def apply_guardrails(response: str) -> str:
     """Apply content guardrails and ensure response stays on topic"""
@@ -367,7 +317,7 @@ def render_sidebar():
     session, identity = setup_aws_session()
     if identity:
         st.sidebar.success("✅ AWS Connected")
-        st.sidebar.info(f"Region: {boto3.Session().region_name}")
+        st.sidebar.info(f"Region: {session.region_name}")
     else:
         st.sidebar.error("❌ AWS Connection Failed")
         return False
@@ -413,6 +363,8 @@ def render_sidebar():
                         st.session_state.endpoint_name = selected_endpoint
                         st.sidebar.success("Connected to existing endpoint!")
                         st.rerun()
+                    else:
+                        st.sidebar.error("Failed to connect to the selected endpoint. Check logs for details.")
             else:
                 st.sidebar.warning("No active endpoints found")
                 st.sidebar.info("💡 Create an endpoint first or switch to 'Deploy New Model'")
@@ -463,7 +415,7 @@ def render_sidebar():
                         st.session_state.predictor.delete_endpoint()
                     st.sidebar.success("Endpoint deleted!")
                 except Exception as e:
-                    st.sidebar.error(f"Error deleting endpoint: {str(e)}")
+                    log_exception("Error deleting endpoint", e)
             
             # Reset connection state
             st.session_state.model_deployed = False
@@ -560,7 +512,7 @@ def render_chat_interface():
             st.markdown(message["content"])
     
     # Chat input
-    if prompt := st.chat_input("What would you like to chat about?"):
+    if prompt := st.chat_input("Ask me about Marriott credit cards and travel rewards..."):
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -578,6 +530,50 @@ def render_chat_interface():
         
         # Add assistant response to messages
         st.session_state.messages.append({"role": "assistant", "content": response})
+
+    # Quick action buttons for common questions
+    st.markdown("---")
+    st.subheader("🚀 Quick Questions")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if st.button("💳 Compare Cards", help="See all Marriott credit card options"):
+            quick_question = "Can you compare all the Marriott credit cards and their benefits?"
+            st.session_state.messages.append({"role": "user", "content": quick_question})
+            with st.chat_message("user"):
+                st.markdown(quick_question)
+            with st.chat_message("assistant"):
+                with st.spinner("Comparing card options..."):
+                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
+                st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
+
+    with col2:
+        if st.button("✈️ Travel Benefits", help="Learn about travel perks and rewards"):
+            quick_question = "What travel benefits and perks do Marriott credit cards offer?"
+            st.session_state.messages.append({"role": "user", "content": quick_question})
+            with st.chat_message("user"):
+                st.markdown(quick_question)
+            with st.chat_message("assistant"):
+                with st.spinner("Finding travel benefits..."):
+                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
+                st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
+
+    with col3:
+        if st.button("📝 Apply Now", help="Start your application process"):
+            quick_question = "How can I apply for a Marriott credit card and what do I need?"
+            st.session_state.messages.append({"role": "user", "content": quick_question})
+            with st.chat_message("user"):
+                st.markdown(quick_question)
+            with st.chat_message("assistant"):
+                with st.spinner("Preparing application information..."):
+                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
+                st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
 
 #%% Section 6: Main Application
 def main():
