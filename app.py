@@ -8,6 +8,7 @@ from sagemaker.jumpstart.model import JumpStartModel
 from sagemaker import get_execution_role
 import time
 from typing import Dict, List
+import base64
 
 
 def log_exception(context: str, exc: Exception) -> None:
@@ -53,14 +54,23 @@ h1, h2, h3 {{
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+# Load the local Marriott HTML file and encode it so it can be embedded
+try:
+    with open("marriottFOC.html", "r", encoding="utf-8") as f:
+        _local_html = f.read()
+    _local_html_b64 = base64.b64encode(_local_html.encode("utf-8")).decode("utf-8")
+    _local_html_data = f"data:text/html;base64,{_local_html_b64}"
+except Exception:
+    _local_html_data = ""
+
 # Background layout to mimic Marriott credit card webpage with chat widget in
-# the bottom left corner. The Marriott page is loaded in an iframe and the
+# the bottom left corner. The local Marriott page is loaded in an iframe and the
 # Streamlit chat interface is positioned as an overlay.
-BACKGROUND_HTML = """
-<iframe src="https://www.marriott.com/credit-cards.mi" class="marriott-bg"></iframe>
+BACKGROUND_HTML = f"""
+<iframe src="{_local_html_data}" class="marriott-bg"></iframe>
 <style>
-body { margin: 0; }
-.marriott-bg {
+body {{ margin: 0; }}
+.marriott-bg {{
     position: fixed;
     top: 0;
     left: 0;
@@ -68,8 +78,8 @@ body { margin: 0; }
     height: 100%;
     border: none;
     z-index: 0;
-}
-.chat-widget {
+}}
+.chat-widget {{
     position: fixed;
     bottom: 20px;
     left: 20px;
@@ -79,7 +89,7 @@ body { margin: 0; }
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0,0,0,0.3);
     z-index: 1000;
-}
+}}
 </style>
 """
 st.markdown(BACKGROUND_HTML, unsafe_allow_html=True)
@@ -638,7 +648,7 @@ def render_chat_interface():
 
     with col3:
         if st.button("📝 Apply Now", help="Start your application process"):
-            open_external_link("https://www.marriott.com/credit-cards.mi")
+            open_external_link("marriottFOC.html")
 
 #%% Section 6: Main Application
 def main():
