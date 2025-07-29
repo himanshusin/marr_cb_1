@@ -15,6 +15,10 @@ def log_exception(context: str, exc: Exception) -> None:
     st.error(f"{context}: {exc}")
     st.text(traceback.format_exc())
 
+def open_external_link(url: str) -> None:
+    """Open an external link in a new browser tab."""
+    st.components.v1.html(f"<script>window.open('{url}', '_blank');</script>", height=0)
+
 #%% Section 2: Configuration and Setup
 # Page config
 st.set_page_config(
@@ -23,6 +27,29 @@ st.set_page_config(
     layout="centered",
     initial_sidebar_state="expanded"
 )
+
+# Marriott-style theme
+MAROON_COLOR = "#B0191E"
+CUSTOM_CSS = f"""
+<style>
+body {{
+    background-color: #f8f6f2;
+    font-family: Arial, sans-serif;
+}}
+h1, h2, h3 {{
+    color: {MAROON_COLOR};
+}}
+.stButton > button {{
+    background-color: {MAROON_COLOR};
+    color: white;
+    border: none;
+}}
+.stButton > button:hover {{
+    background-color: #7d1014;
+}}
+</style>
+"""
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # Model configuration
 MODEL_ID = "meta-textgeneration-llama-2-7b-f"
@@ -312,118 +339,121 @@ def apply_guardrails(response: str) -> str:
 def render_sidebar():
     """Render the sidebar with controls and info"""
     st.sidebar.title("🏨 Marriott Credit Card Assistant")
-    
-    # AWS Info
-    session, identity = setup_aws_session()
-    if identity:
-        st.sidebar.success("✅ AWS Connected")
-        st.sidebar.info(f"Region: {session.region_name}")
-    else:
-        st.sidebar.error("❌ AWS Connection Failed")
-        return False
-    
-    # Model Connection Method
-    st.sidebar.subheader("🔗 Connection Method")
-    connection_method = st.sidebar.radio(
-        "Choose how to connect:",
-        ["existing", "deploy_new"],
-        format_func=lambda x: "Use Existing Endpoint" if x == "existing" else "Deploy New Model",
-        key="connection_method"
-    )
-    
-    # Model Info
-    st.sidebar.subheader("📊 Model Information")
-    st.sidebar.info(f"Model: {MODEL_ID}")
-    st.sidebar.info(f"Status: {st.session_state.deployment_status}")
-    
-    # Connection/Deployment controls
-    st.sidebar.subheader("🚀 Model Connection")
-    
-    if not st.session_state.model_deployed:
-        if connection_method == "existing":
-            # Option 1: Connect to existing endpoint
-            st.sidebar.markdown("**Connect to Existing Endpoint**")
-            
-            # Get list of available endpoints
-            available_endpoints = get_existing_endpoints()
-            
-            if available_endpoints:
-                selected_endpoint = st.sidebar.selectbox(
-                    "Select an endpoint:",
-                    [""] + available_endpoints,
-                    help="Choose from your existing SageMaker endpoints"
+
+    with st.sidebar.expander("⚙️ Settings", expanded=True):
+        # AWS Info
+        session, identity = setup_aws_session()
+        if identity:
+            st.success("✅ AWS Connected")
+            st.info(f"Region: {session.region_name}")
+        else:
+            st.error("❌ AWS Connection Failed")
+            return False
+
+        # Model Connection Method
+        st.subheader("🔗 Connection Method")
+        connection_method = st.radio(
+            "Choose how to connect:",
+            ["existing", "deploy_new"],
+            format_func=lambda x: "Use Existing Endpoint" if x == "existing" else "Deploy New Model",
+            key="connection_method"
+        )
+
+        # Model Info
+        st.subheader("📊 Model Information")
+        st.info(f"Model: {MODEL_ID}")
+        st.info(f"Status: {st.session_state.deployment_status}")
+
+        # Connection/Deployment controls
+        st.subheader("🚀 Model Connection")
+
+        if not st.session_state.model_deployed:
+            if connection_method == "existing":
+                st.markdown("**Connect to Existing Endpoint**")
+
+                available_endpoints = get_existing_endpoints()
+
+                if available_endpoints:
+                    selected_endpoint = st.selectbox(
+                        "Select an endpoint:",
+                        [""] + available_endpoints,
+                        help="Choose from your existing SageMaker endpoints"
+                    )
+
+                    if selected_endpoint and st.button("🔗 Connect to Endpoint", type="primary"):
+                        predictor = connect_to_existing_endpoint(selected_endpoint)
+                        if predictor:
+                            st.session_state.predictor = predictor
+                            st.session_state.model_deployed = True
+                            st.session_state.deployment_status = f"Connected to: {selected_endpoint}"
+                            st.session_state.endpoint_name = selected_endpoint
+                            st.success("Connected to existing endpoint!")
+                            st.rerun()
+                        else:
+                            st.error("Failed to connect to the selected endpoint. Check logs for details.")
+                else:
+                    st.warning("No active endpoints found")
+                    st.info("💡 Create an endpoint first or switch to 'Deploy New Model'")
+
+                st.markdown("**Or enter endpoint name manually:**")
+                manual_endpoint = st.text_input(
+                    "Endpoint name:",
+                    placeholder="jumpstart-dft-meta-textgeneration-llama-2-7b-f",
+                    help="Enter the exact name of your SageMaker endpoint"
                 )
-                
-                if selected_endpoint and st.sidebar.button("🔗 Connect to Endpoint", type="primary"):
-                    predictor = connect_to_existing_endpoint(selected_endpoint)
+
+                if manual_endpoint and st.button("🔗 Connect Manually"):
+                    predictor = connect_to_existing_endpoint(manual_endpoint)
                     if predictor:
                         st.session_state.predictor = predictor
                         st.session_state.model_deployed = True
-                        st.session_state.deployment_status = f"Connected to: {selected_endpoint}"
-                        st.session_state.endpoint_name = selected_endpoint
-                        st.sidebar.success("Connected to existing endpoint!")
+                        st.session_state.deployment_status = f"Connected to: {manual_endpoint}"
+                        st.session_state.endpoint_name = manual_endpoint
+                        st.success("Connected to endpoint!")
                         st.rerun()
-                    else:
-                        st.sidebar.error("Failed to connect to the selected endpoint. Check logs for details.")
+
             else:
-                st.sidebar.warning("No active endpoints found")
-                st.sidebar.info("💡 Create an endpoint first or switch to 'Deploy New Model'")
-            
-            # Manual endpoint name input
-            st.sidebar.markdown("**Or enter endpoint name manually:**")
-            manual_endpoint = st.sidebar.text_input(
-                "Endpoint name:",
-                placeholder="jumpstart-dft-meta-textgeneration-llama-2-7b-f",
-                help="Enter the exact name of your SageMaker endpoint"
-            )
-            
-            if manual_endpoint and st.sidebar.button("🔗 Connect Manually"):
-                predictor = connect_to_existing_endpoint(manual_endpoint)
-                if predictor:
-                    st.session_state.predictor = predictor
-                    st.session_state.model_deployed = True
-                    st.session_state.deployment_status = f"Connected to: {manual_endpoint}"
-                    st.session_state.endpoint_name = manual_endpoint
-                    st.sidebar.success("Connected to endpoint!")
-                    st.rerun()
-        
+                st.markdown("**Deploy New Model**")
+                st.warning("⚠️ This will take 5-10 minutes and incur costs")
+
+                if st.button("🚀 Deploy New Model", type="primary"):
+                    predictor = deploy_new_model()
+                    if predictor:
+                        st.session_state.predictor = predictor
+                        st.session_state.model_deployed = True
+                        st.session_state.deployment_status = f"Deployed: {predictor.endpoint_name}"
+                        st.session_state.endpoint_name = predictor.endpoint_name
+                        st.success("Model deployed successfully!")
+                        st.rerun()
+
         else:
-            # Option 2: Deploy new model
-            st.sidebar.markdown("**Deploy New Model**")
-            st.sidebar.warning("⚠️ This will take 5-10 minutes and incur costs")
-            
-            if st.sidebar.button("🚀 Deploy New Model", type="primary"):
-                predictor = deploy_new_model()
-                if predictor:
-                    st.session_state.predictor = predictor
-                    st.session_state.model_deployed = True
-                    st.session_state.deployment_status = f"Deployed: {predictor.endpoint_name}"
-                    st.session_state.endpoint_name = predictor.endpoint_name
-                    st.sidebar.success("Model deployed successfully!")
-                    st.rerun()
-    
-    else:
-        # Model is connected/deployed
-        st.sidebar.success("✅ Assistant is ready!")
-        st.sidebar.info(f"Endpoint: {st.session_state.endpoint_name}")
-        
-        if st.sidebar.button("🔌 Disconnect"):
-            # Only delete endpoint if we deployed it (not if we connected to existing)
-            if st.session_state.connection_method == "deploy_new" and st.session_state.predictor:
-                try:
-                    with st.spinner("Deleting endpoint..."):
-                        st.session_state.predictor.delete_endpoint()
-                    st.sidebar.success("Endpoint deleted!")
-                except Exception as e:
-                    log_exception("Error deleting endpoint", e)
-            
-            # Reset connection state
-            st.session_state.model_deployed = False
-            st.session_state.predictor = None
-            st.session_state.deployment_status = "Not connected"
-            st.session_state.endpoint_name = ""
+            st.success("✅ Assistant is ready!")
+            st.info(f"Endpoint: {st.session_state.endpoint_name}")
+
+            if st.button("🔌 Disconnect"):
+                if st.session_state.connection_method == "deploy_new" and st.session_state.predictor:
+                    try:
+                        with st.spinner("Deleting endpoint..."):
+                            st.session_state.predictor.delete_endpoint()
+                        st.success("Endpoint deleted!")
+                    except Exception as e:
+                        log_exception("Error deleting endpoint", e)
+
+                st.session_state.model_deployed = False
+                st.session_state.predictor = None
+                st.session_state.deployment_status = "Not connected"
+                st.session_state.endpoint_name = ""
+                st.rerun()
+
+        st.subheader("💬 Chat Controls")
+        if st.button("🔄 Reset Conversation"):
+            st.session_state.messages = [{"role": "assistant", "content": WELCOME_MESSAGE}]
+            st.session_state.conversation_context = []
             st.rerun()
-    
+
+        st.subheader("Response Settings")
+        max_length = st.slider("Max Response Length", 100, 400, 250)
+
     # Quick Info Panel
     st.sidebar.subheader("💳 Quick Card Info")
     with st.sidebar.expander("Marriott Credit Cards"):
@@ -443,17 +473,6 @@ def render_sidebar():
         • Premium travel benefits
         • Priority Pass access
         """)
-    
-    # Chat controls
-    st.sidebar.subheader("💬 Chat Controls")
-    if st.sidebar.button("🔄 Reset Conversation"):
-        st.session_state.messages = [{"role": "assistant", "content": WELCOME_MESSAGE}]
-        st.session_state.conversation_context = []
-        st.rerun()
-    
-    # Settings
-    st.sidebar.subheader("⚙️ Response Settings")
-    max_length = st.sidebar.slider("Max Response Length", 100, 400, 250)
     
     return True, max_length
 
@@ -564,16 +583,7 @@ def render_chat_interface():
 
     with col3:
         if st.button("📝 Apply Now", help="Start your application process"):
-            quick_question = "How can I apply for a Marriott credit card and what do I need?"
-            st.session_state.messages.append({"role": "user", "content": quick_question})
-            with st.chat_message("user"):
-                st.markdown(quick_question)
-            with st.chat_message("assistant"):
-                with st.spinner("Preparing application information..."):
-                    response = generate_response(st.session_state.predictor, quick_question, st.session_state.get('max_length', 250))
-                st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
+            open_external_link("https://www.marriott.com/credit-cards.mi")
 
 #%% Section 6: Main Application
 def main():
