@@ -67,7 +67,7 @@ body { margin: 0; }
     width: 100%;
     height: 100%;
     border: none;
-    z-index: -1;
+    z-index: 0;
 }
 .chat-widget {
     position: fixed;
