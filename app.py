@@ -234,11 +234,33 @@ Assistant: """
         
         # Get prediction
         response = predictor.predict(payload)
-        
-        # Extract generated text
-        if isinstance(response, list) and len(response) > 0:
-            generated_text = response[0].get("generated_text", "")
-        else:
+
+        # Extract generated text from various possible formats
+        generated_text = ""
+        try:
+            if isinstance(response, list) and len(response) > 0:
+                first_item = response[0]
+                if isinstance(first_item, dict):
+                    generated_text = first_item.get("generated_text", "")
+                else:
+                    generated_text = str(first_item)
+            elif isinstance(response, dict):
+                generated_text = response.get("generated_text", "")
+            elif isinstance(response, str):
+                # Some endpoints return a JSON string
+                try:
+                    data = json.loads(response)
+                    if isinstance(data, list) and len(data) > 0:
+                        generated_text = data[0].get("generated_text", "")
+                    elif isinstance(data, dict):
+                        generated_text = data.get("generated_text", "")
+                    else:
+                        generated_text = response
+                except json.JSONDecodeError:
+                    generated_text = response
+            else:
+                generated_text = str(response)
+        except Exception:
             generated_text = str(response)
         
         # Clean up the response
